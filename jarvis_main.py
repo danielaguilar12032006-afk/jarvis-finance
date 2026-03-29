@@ -3,7 +3,7 @@ import time
 import requests
 from datetime import datetime
 
-print("🚀 JARVIS SIMULADOR ACTIVO")
+print("🔥 VERSION NUEVA SIMULADOR 🔥")
 
 INTERVALO = 60
 
