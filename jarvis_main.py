@@ -6,7 +6,6 @@ from openai import OpenAI
 
 print("🚀 NUEVO JARVIS ACTIVO")
 
-# 🔐 API KEY (desde variables de entorno)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ⚙️ CONFIG
@@ -20,7 +19,12 @@ SYMBOLS = {
     "DOGE": "XDGUSD"
 }
 
-# 📊 OBTENER PRECIOS (KRAKEN)
+# 💰 SIMULACIÓN
+BALANCE = 1000
+PORTFOLIO = {k: 0 for k in SYMBOLS}
+LAST_PRICES = {}
+
+# 📊 OBTENER PRECIOS
 def get_prices():
     try:
         pairs = ",".join(SYMBOLS.values())
@@ -41,6 +45,36 @@ def get_prices():
         print("Error obteniendo precios:", e)
         return {}
 
+# 🤖 SIMULACIÓN DE TRADING
+def simulate_trading(prices):
+    global BALANCE, PORTFOLIO, LAST_PRICES
+
+    for crypto, price in prices.items():
+
+        if crypto not in LAST_PRICES:
+            LAST_PRICES[crypto] = price
+            continue
+
+        old_price = LAST_PRICES[crypto]
+        change = (price - old_price) / old_price * 100
+
+        # 🟢 COMPRAR
+        if change < -1 and BALANCE > 50:
+            amount = 50 / price
+            PORTFOLIO[crypto] += amount
+            BALANCE -= 50
+            print(f"🟢 BUY {crypto} - $50")
+
+        # 🔴 VENDER
+        elif change > 1 and PORTFOLIO[crypto] > 0:
+            amount = PORTFOLIO[crypto]
+            value = amount * price
+            BALANCE += value
+            PORTFOLIO[crypto] = 0
+            print(f"🔴 SELL {crypto} - ${value:.2f}")
+
+        LAST_PRICES[crypto] = price
+
 # 🔁 LOOP PRINCIPAL
 def run():
     print("===== JARVIS FINANCIERO =====")
@@ -55,6 +89,12 @@ def run():
         if prices:
             for crypto, price in prices.items():
                 print(f"{crypto} → ${price}")
+
+            simulate_trading(prices)
+
+            print(f"\n💰 Balance: ${BALANCE:.2f}")
+            print(f"📦 Portfolio: {PORTFOLIO}")
+
         else:
             print("⚠️ No se obtuvieron precios")
 
