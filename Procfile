@@ -1,1 +1,1 @@
-worker: python jarvis_alerts.py
+worker: python jarvis_main.py
