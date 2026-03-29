@@ -4,143 +4,107 @@ import requests
 from datetime import datetime
 from openai import OpenAI
 
-print("🚀 JARVIS SIMULADOR PROTEGIDO")
+print("🚀 JARVIS SIMULADOR PRO")
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 INTERVALO = 60
 
-# 💰 dinero inicial
 balance = 1000
-
-# 📦 portafolio
 portfolio = {
-    "BTC": 0,
-    "ETH": 0
+    "BTC": 0
 }
 
-# 🧠 precio de compra
-buy_price = 0
+buy_price = None
 
-SYMBOLS = {
-    "BTC": "XXBTZUSD",
-    "ETH": "XETHZUSD"
-}
+def get_price():
+    url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+    data = requests.get(url).json()
+    return float(data["price"])
 
-# 📊 precios
-def get_prices():
-    try:
-        pairs = ",".join(SYMBOLS.values())
-        url = f"https://api.kraken.com/0/public/Ticker?pair={pairs}"
-        response = requests.get(url, timeout=10).json()
-
-        prices = {}
-        for key, pair in SYMBOLS.items():
-            for kraken_key in response["result"]:
-                if pair in kraken_key:
-                    prices[key] = float(response["result"][kraken_key]["c"][0])
-
-        return prices
-
-    except Exception as e:
-        print("Error precios:", e)
-        return {}
-
-# 🤖 decisión
-def decide_action(prices):
+def decide_action(price):
     prompt = f"""
-    You are a professional crypto trader.
+    You are a crypto trading bot.
 
-    Rules:
-    - Buy only in strong uptrend
-    - Sell in downtrend
-    - Avoid overtrading
-    - Be conservative
-
-    Prices: {prices}
+    Price: {price}
     Balance: {balance}
     Portfolio: {portfolio}
+
+    Rules:
+    - If price going up → BUY
+    - If price weak → SELL
+    - Otherwise HOLD
 
     Answer ONLY: BUY, SELL or HOLD
     """
 
+    response = client.responses.create(
+        model="gpt-5-mini",
+        input=prompt
+    )
+
+    return response.output_text.strip().upper()
+
+
+while True:
     try:
-        response = client.chat.completions.create(
-            model="gpt-5-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+        price = get_price()
 
-        return response.choices[0].message.content.strip().upper()
-
-    except Exception as e:
-        print("Error IA:", e)
-        return "HOLD"
-
-# 🔁 loop
-def run():
-    global balance, buy_price
-
-    print("===== JARVIS PRO =====")
-
-    while True:
-        now = datetime.now()
-        print("\n🕒", now)
-
-        print("💰 Balance:", round(balance, 2))
+        print("\n⏱", datetime.now())
+        print("💰 Balance:", balance)
         print("📦 Portfolio:", portfolio)
+        print("📊 Price:", price)
 
-        prices = get_prices()
+        action = decide_action(price)
+        print("🧠 Decision:", action)
 
-        if prices:
-            btc_price = prices["BTC"]
-            print("📊 Prices:", prices)
+        # =========================
+        # 🔒 REGLA: SOLO UNA POSICIÓN
+        # =========================
+        has_position = portfolio["BTC"] > 0
 
-            # 🔴 STOP LOSS / TAKE PROFIT
-            if portfolio["BTC"] > 0:
+        # =========================
+        # 🟢 BUY
+        # =========================
+        if action == "BUY" and not has_position and balance > 100:
+            amount = 100 / price
+            portfolio["BTC"] += amount
+            balance -= 100
+            buy_price = price
 
-                # Stop loss -2%
-                if btc_price < buy_price * 0.99:
-                    balance += portfolio["BTC"] * btc_price
-                    portfolio["BTC"] = 0
-                    print("🔴 STOP LOSS ACTIVADO")
-                    continue
+            print("🟢 Compra BTC:", amount)
 
-                # Take profit +3%
-                if btc_price > buy_price * 1.01:
-                    balance += portfolio["BTC"] * btc_price
-                    portfolio["BTC"] = 0
-                    print("🟢 TAKE PROFIT")
-                    continue
+        # =========================
+        # 🔴 SELL
+        # =========================
+        elif action == "SELL" and has_position:
+            balance += portfolio["BTC"] * price
+            print("🔴 Vendió BTC:", portfolio["BTC"])
+            portfolio["BTC"] = 0
+            buy_price = None
 
-            decision = decide_action(prices)
-            print("🤖 Decision:", decision)
+        # =========================
+        # 🧠 STOP LOSS / TAKE PROFIT
+        # =========================
+        if has_position and buy_price:
+            change = (price - buy_price) / buy_price
 
-            # 🟢 COMPRA (solo si NO tienes BTC)
-            if decision == "BUY" and balance >= 100 and portfolio["BTC"] == 0:
-                amount = 100 / btc_price
-
-                portfolio["BTC"] += amount
-                balance -= 100
-                buy_price = btc_price
-
-                print("🟢 Compró BTC:", round(amount, 6))
-
-            # 🔴 VENTA
-            elif decision == "SELL" and portfolio["BTC"] > 0:
-                balance += portfolio["BTC"] * btc_price
+            if change <= -0.01:
+                print("🛑 STOP LOSS")
+                balance += portfolio["BTC"] * price
                 portfolio["BTC"] = 0
+                buy_price = None
 
-                print("🔴 Vendió BTC")
+            elif change >= 0.01:
+                print("💰 TAKE PROFIT")
+                balance += portfolio["BTC"] * price
+                portfolio["BTC"] = 0
+                buy_price = None
 
-            else:
-                print("⏸️ HOLD")
+        print("--- Esperando siguiente revisión ---")
 
-        else:
-            print("⚠️ Error obteniendo precios")
-
-        print("\n--- Esperando siguiente revisión ---")
         time.sleep(INTERVALO)
 
-# ▶️ start
-if __name__ == "__main__":
-    run()
+    except Exception as e:
+        print("Error:", e)
+        time.sleep(10)
