@@ -99,14 +99,14 @@ def run():
             if portfolio["BTC"] > 0:
 
                 # Stop loss -2%
-                if btc_price < buy_price * 0.98:
+                if btc_price < buy_price * 0.99:
                     balance += portfolio["BTC"] * btc_price
                     portfolio["BTC"] = 0
                     print("🔴 STOP LOSS ACTIVADO")
                     continue
 
                 # Take profit +3%
-                if btc_price > buy_price * 1.03:
+                if btc_price > buy_price * 1.01:
                     balance += portfolio["BTC"] * btc_price
                     portfolio["BTC"] = 0
                     print("🟢 TAKE PROFIT")
