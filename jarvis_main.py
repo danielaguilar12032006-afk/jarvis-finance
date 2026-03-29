@@ -4,12 +4,10 @@ import requests
 from datetime import datetime
 from openai import OpenAI
 
-print("🚀 JARVIS SIMULADOR ACTIVO")
+print("🚀 JARVIS SIMULADOR PROTEGIDO")
 
-# 🔐 API KEY desde Railway
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ⏱️ intervalo (segundos)
 INTERVALO = 60
 
 # 💰 dinero inicial
@@ -21,13 +19,15 @@ portfolio = {
     "ETH": 0
 }
 
-# 📊 criptos
+# 🧠 precio de compra
+buy_price = 0
+
 SYMBOLS = {
     "BTC": "XXBTZUSD",
     "ETH": "XETHZUSD"
 }
 
-# 📈 obtener precios
+# 📊 precios
 def get_prices():
     try:
         pairs = ",".join(SYMBOLS.values())
@@ -35,7 +35,6 @@ def get_prices():
         response = requests.get(url, timeout=10).json()
 
         prices = {}
-
         for key, pair in SYMBOLS.items():
             for kraken_key in response["result"]:
                 if pair in kraken_key:
@@ -44,20 +43,25 @@ def get_prices():
         return prices
 
     except Exception as e:
-        print("Error obteniendo precios:", e)
+        print("Error precios:", e)
         return {}
 
-# 🤖 decisión con IA
+# 🤖 decisión
 def decide_action(prices):
     prompt = f"""
-    You are a crypto trading bot.
+    You are a professional crypto trader.
+
+    Rules:
+    - Buy only in strong uptrend
+    - Sell in downtrend
+    - Avoid overtrading
+    - Be conservative
 
     Prices: {prices}
     Balance: {balance}
     Portfolio: {portfolio}
 
-    Decide: BUY, SELL or HOLD.
-    Answer ONLY one word.
+    Answer ONLY: BUY, SELL or HOLD
     """
 
     try:
@@ -66,18 +70,17 @@ def decide_action(prices):
             messages=[{"role": "user", "content": prompt}]
         )
 
-        decision = response.choices[0].message.content.strip().upper()
-        return decision
+        return response.choices[0].message.content.strip().upper()
 
     except Exception as e:
         print("Error IA:", e)
         return "HOLD"
 
-# 🔁 loop principal
+# 🔁 loop
 def run():
-    global balance
+    global balance, buy_price
 
-    print("===== JARVIS SIMULADOR =====")
+    print("===== JARVIS PRO =====")
 
     while True:
         now = datetime.now()
@@ -89,35 +92,51 @@ def run():
         prices = get_prices()
 
         if prices:
+            btc_price = prices["BTC"]
             print("📊 Prices:", prices)
+
+            # 🔴 STOP LOSS / TAKE PROFIT
+            if portfolio["BTC"] > 0:
+
+                # Stop loss -2%
+                if btc_price < buy_price * 0.98:
+                    balance += portfolio["BTC"] * btc_price
+                    portfolio["BTC"] = 0
+                    print("🔴 STOP LOSS ACTIVADO")
+                    continue
+
+                # Take profit +3%
+                if btc_price > buy_price * 1.03:
+                    balance += portfolio["BTC"] * btc_price
+                    portfolio["BTC"] = 0
+                    print("🟢 TAKE PROFIT")
+                    continue
 
             decision = decide_action(prices)
             print("🤖 Decision:", decision)
 
-            # 🟢 COMPRAR
-            if decision == "BUY" and balance >= 100:
-                btc_price = prices["BTC"]
+            # 🟢 COMPRA (solo si NO tienes BTC)
+            if decision == "BUY" and balance >= 100 and portfolio["BTC"] == 0:
                 amount = 100 / btc_price
 
                 portfolio["BTC"] += amount
                 balance -= 100
+                buy_price = btc_price
 
                 print("🟢 Compró BTC:", round(amount, 6))
 
-            # 🔴 VENDER
+            # 🔴 VENTA
             elif decision == "SELL" and portfolio["BTC"] > 0:
-                btc_price = prices["BTC"]
-
                 balance += portfolio["BTC"] * btc_price
-                print("🔴 Vendió BTC")
-
                 portfolio["BTC"] = 0
+
+                print("🔴 Vendió BTC")
 
             else:
                 print("⏸️ HOLD")
 
         else:
-            print("⚠️ No se obtuvieron precios")
+            print("⚠️ Error obteniendo precios")
 
         print("\n--- Esperando siguiente revisión ---")
         time.sleep(INTERVALO)
