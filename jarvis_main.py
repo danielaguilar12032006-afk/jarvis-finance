@@ -2,13 +2,9 @@ import os
 import time
 import requests
 from datetime import datetime
-from openai import OpenAI
 
-print("🚀 NUEVO JARVIS ACTIVO")
+print("🚀 JARVIS SIMULADOR ACTIVO")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# ⚙️ CONFIG
 INTERVALO = 60
 
 SYMBOLS = {
@@ -21,7 +17,7 @@ SYMBOLS = {
 
 # 💰 SIMULACIÓN
 BALANCE = 1000
-PORTFOLIO = {k: 0 for k in SYMBOLS}
+PORTFOLIO = {}
 LAST_PRICES = {}
 
 # 📊 OBTENER PRECIOS
@@ -42,43 +38,43 @@ def get_prices():
         return prices
 
     except Exception as e:
-        print("Error obteniendo precios:", e)
+        print("Error:", e)
         return {}
 
-# 🤖 SIMULACIÓN DE TRADING
+# 🧠 SIMULADOR
 def simulate_trading(prices):
     global BALANCE, PORTFOLIO, LAST_PRICES
 
-    for crypto, price in prices.items():
+    for coin, price in prices.items():
 
-        if crypto not in LAST_PRICES:
-            LAST_PRICES[crypto] = price
+        if coin not in LAST_PRICES:
+            LAST_PRICES[coin] = price
             continue
 
-        old_price = LAST_PRICES[crypto]
-        change = (price - old_price) / old_price * 100
+        change = (price - LAST_PRICES[coin]) / LAST_PRICES[coin]
 
-        # 🟢 COMPRAR
-        if change < -1 and BALANCE > 50:
-            amount = 50 / price
-            PORTFOLIO[crypto] += amount
-            BALANCE -= 50
-            print(f"🟢 BUY {crypto} - $50")
+        # 📉 BAJÓ → COMPRAR
+        if change < -0.01 and BALANCE > 50:
+            amount = BALANCE * 0.1
+            PORTFOLIO[coin] = PORTFOLIO.get(coin, 0) + amount / price
+            BALANCE -= amount
+            print(f"🟢 BUY {coin} ${amount}")
 
-        # 🔴 VENDER
-        elif change > 1 and PORTFOLIO[crypto] > 0:
-            amount = PORTFOLIO[crypto]
-            value = amount * price
-            BALANCE += value
-            PORTFOLIO[crypto] = 0
-            print(f"🔴 SELL {crypto} - ${value:.2f}")
+        # 📈 SUBIÓ → VENDER
+        elif change > 0.01 and coin in PORTFOLIO:
+            amount = PORTFOLIO[coin] * price
+            BALANCE += amount
+            print(f"🔴 SELL {coin} ${amount}")
+            PORTFOLIO[coin] = 0
 
-        LAST_PRICES[crypto] = price
+        LAST_PRICES[coin] = price
+
+    print(f"💰 Balance: ${BALANCE:.2f}")
+    print(f"📦 Portfolio: {PORTFOLIO}")
 
 # 🔁 LOOP PRINCIPAL
 def run():
-    print("===== JARVIS FINANCIERO =====")
-    print("🚀 Iniciando monitoreo...\n")
+    print("===== JARVIS TRADING SIMULATION =====")
 
     while True:
         now = datetime.now()
@@ -90,13 +86,11 @@ def run():
             for crypto, price in prices.items():
                 print(f"{crypto} → ${price}")
 
+            # 🔥 AQUÍ ESTÁ LO IMPORTANTE
             simulate_trading(prices)
 
-            print(f"\n💰 Balance: ${BALANCE:.2f}")
-            print(f"📦 Portfolio: {PORTFOLIO}")
-
         else:
-            print("⚠️ No se obtuvieron precios")
+            print("⚠️ Error obteniendo precios")
 
         print("\n--- Esperando siguiente revisión ---")
         time.sleep(INTERVALO)
