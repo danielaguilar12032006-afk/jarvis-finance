@@ -1,25 +1,20 @@
-import os
 import time
 import requests
 from datetime import datetime
-from openai import OpenAI
 
-print("🚀 JARVIS DEBUG MODE ACTIVADO")
+print("🚀 JARVIS SIMULADOR ESTABLE")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-INTERVALO = 60
+INTERVAL = 60
+TRADE_AMOUNT = 100
+COOLDOWN = 180  # 3 minutos
 
 balance = 1000
-
-portfolio = {
-    "BTC": 0
-}
-
+btc = 0
 buy_price = None
+last_trade_time = 0
 
 # =========================
-# 📊 PRECIO
+# 📊 PRECIO BTC
 # =========================
 def get_price():
     url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
@@ -27,101 +22,70 @@ def get_price():
     return float(data["price"])
 
 # =========================
-# 🧠 DECISIÓN IA (MUY ESTRICTA)
+# 📈 ESTRATEGIA SIMPLE
 # =========================
-def decide_action(price):
-    prompt = f"""
-    You are a professional crypto scalping bot.
+def get_signal(price, last_price):
+    if last_price is None:
+        return "HOLD"
 
-    CURRENT STATE:
-    Price: {price}
-    Balance: {balance}
-    BTC Holding: {portfolio["BTC"]}
+    change = (price - last_price) / last_price
 
-    STRICT RULES:
-    1. If you ALREADY HOLD BTC → you CANNOT BUY again
-    2. If you HOLD BTC:
-        - SELL if price is dropping or weak
-        - HOLD if stable
-    3. If you DO NOT HOLD BTC:
-        - BUY only if price is clearly going up
-        - HOLD if unclear
-    4. Avoid unnecessary trades
-
-    Answer ONLY: BUY, SELL or HOLD
-    """
-
-    response = client.responses.create(
-        model="gpt-5-mini",
-        input=prompt
-    )
-
-    decision = response.output_text.strip().upper()
-    return decision
+    if change > 0.002:   # sube 0.2%
+        return "BUY"
+    elif change < -0.002:  # baja 0.2%
+        return "SELL"
+    else:
+        return "HOLD"
 
 # =========================
-# 🔁 LOOP PRINCIPAL
+# 🔁 LOOP
 # =========================
+last_price = None
+
 while True:
     try:
         price = get_price()
-        has_position = portfolio["BTC"] > 0
+        current_time = time.time()
+        has_position = btc > 0
 
         print("\n==============================")
-        print("⏱ Tiempo:", datetime.now())
-        print("💰 Balance:", balance)
-        print("📦 BTC:", portfolio["BTC"])
+        print("⏱", datetime.now())
+        print("💰 Balance:", round(balance, 2))
+        print("📦 BTC:", round(btc, 6))
         print("📊 Precio:", price)
-        print("📍 Tiene posición:", has_position)
 
-        action = decide_action(price)
-        print("🧠 IA dice:", action)
+        action = get_signal(price, last_price)
+        print("🧠 Señal:", action)
 
         # =========================
-        # 🟢 BUY LOGIC
+        # 🟢 BUY
         # =========================
         if action == "BUY":
             if has_position:
-                print("❌ ERROR IA: quiso comprar pero YA hay posición")
-            elif balance < 100:
-                print("❌ ERROR: no hay suficiente balance")
-            else:
-                amount = 100 / price
-                portfolio["BTC"] += amount
-                balance -= 100
+                print("⚠️ Ya tienes BTC")
+            elif current_time - last_trade_time < COOLDOWN:
+                print("⏳ Cooldown activo")
+            elif balance >= TRADE_AMOUNT:
+                btc = TRADE_AMOUNT / price
+                balance -= TRADE_AMOUNT
                 buy_price = price
+                last_trade_time = current_time
 
-                print("✅ COMPRA EJECUTADA")
-                print("   BTC comprado:", amount)
-                print("   Precio compra:", buy_price)
+                print("🟢 COMPRA:", btc)
 
         # =========================
-        # 🔴 SELL LOGIC
+        # 🔴 SELL
         # =========================
         elif action == "SELL":
             if not has_position:
-                print("❌ ERROR IA: quiso vender sin tener BTC")
+                print("⚠️ No tienes BTC")
             else:
-                sell_value = portfolio["BTC"] * price
-                profit = sell_value - (portfolio["BTC"] * buy_price)
+                balance += btc * price
+                print("🔴 VENTA:", btc)
 
-                balance += sell_value
-
-                print("✅ VENTA EJECUTADA")
-                print("   BTC vendido:", portfolio["BTC"])
-                print("   Profit:", profit)
-
-                portfolio["BTC"] = 0
+                btc = 0
                 buy_price = None
-
-        # =========================
-        # 🧠 HOLD
-        # =========================
-        elif action == "HOLD":
-            print("⏸ HOLD - No acción")
-
-        else:
-            print("❌ RESPUESTA INVALIDA DE IA")
+                last_trade_time = current_time
 
         # =========================
         # 🛑 STOP LOSS / TAKE PROFIT
@@ -129,26 +93,27 @@ while True:
         if has_position and buy_price:
             change = (price - buy_price) / buy_price
 
-            print("📉 Cambio desde compra:", round(change * 100, 2), "%")
+            print("📉 Cambio:", round(change * 100, 2), "%")
 
             if change <= -0.01:
-                print("🛑 STOP LOSS ACTIVADO")
-
-                balance += portfolio["BTC"] * price
-                portfolio["BTC"] = 0
+                print("🛑 STOP LOSS")
+                balance += btc * price
+                btc = 0
                 buy_price = None
+                last_trade_time = current_time
 
             elif change >= 0.01:
-                print("💰 TAKE PROFIT ACTIVADO")
-
-                balance += portfolio["BTC"] * price
-                portfolio["BTC"] = 0
+                print("💰 TAKE PROFIT")
+                balance += btc * price
+                btc = 0
                 buy_price = None
+                last_trade_time = current_time
 
-        print("🔁 Esperando siguiente ciclo...\n")
+        last_price = price
 
-        time.sleep(INTERVALO)
+        print("🔁 Esperando...\n")
+        time.sleep(INTERVAL)
 
     except Exception as e:
-        print("❌ ERROR GENERAL:", e)
+        print("❌ Error:", e)
         time.sleep(10)
