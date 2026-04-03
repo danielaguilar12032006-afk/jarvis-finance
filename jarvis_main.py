@@ -1,119 +1,106 @@
 import time
-import requests
-from datetime import datetime
+from data.market import get_price
+from core.strategy import check_buy_signal
+from core.trader import calculate_targets
+import json
+import os
 
-print("🚀 JARVIS SIMULADOR ESTABLE")
+SLEEP_TIME = 10
+STATE_FILE = "data/state.json"
 
-INTERVAL = 60
-TRADE_AMOUNT = 100
-COOLDOWN = 180  # 3 minutos
+# ======================
+# STATE FUNCTIONS
+# ======================
 
-balance = 1000
-btc = 0
-buy_price = None
-last_trade_time = 0
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    return {
+        "in_position": False,
+        "buy_price": None,
+        "target": None,
+        "stop": None
+    }
 
-# =========================
-# 📊 PRECIO BTC
-# =========================
-def get_price():
-    url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-    data = requests.get(url).json()
-    return float(data["price"])
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
 
-# =========================
-# 📈 ESTRATEGIA SIMPLE
-# =========================
-def get_signal(price, last_price):
-    if last_price is None:
-        return "HOLD"
+# ======================
+# INIT
+# ======================
 
-    change = (price - last_price) / last_price
+state = load_state()
 
-    if change > 0.002:   # sube 0.2%
-        return "BUY"
-    elif change < -0.002:  # baja 0.2%
-        return "SELL"
-    else:
-        return "HOLD"
+in_position = state["in_position"]
+buy_price = state["buy_price"]
+target = state["target"]
+stop = state["stop"]
 
-# =========================
-# 🔁 LOOP
-# =========================
-last_price = None
+last_prices = []
+
+# ======================
+# MAIN LOOP
+# ======================
 
 while True:
     try:
         price = get_price()
-        current_time = time.time()
-        has_position = btc > 0
+        print(f"Price: {price}")
 
-        print("\n==============================")
-        print("⏱", datetime.now())
-        print("💰 Balance:", round(balance, 2))
-        print("📦 BTC:", round(btc, 6))
-        print("📊 Precio:", price)
+        last_prices.append(price)
+        if len(last_prices) > 50:
+            last_prices.pop(0)
 
-        action = get_signal(price, last_price)
-        print("🧠 Señal:", action)
+        # ======================
+        # BUY LOGIC
+        # ======================
+        if not in_position:
+            if check_buy_signal(last_prices):
+                print(f"BUY at {price}")
 
-        # =========================
-        # 🟢 BUY
-        # =========================
-        if action == "BUY":
-            if has_position:
-                print("⚠️ Ya tienes BTC")
-            elif current_time - last_trade_time < COOLDOWN:
-                print("⏳ Cooldown activo")
-            elif balance >= TRADE_AMOUNT:
-                btc = TRADE_AMOUNT / price
-                balance -= TRADE_AMOUNT
                 buy_price = price
-                last_trade_time = current_time
+                target, stop = calculate_targets(price)
 
-                print("🟢 COMPRA:", btc)
+                in_position = True
 
-        # =========================
-        # 🔴 SELL
-        # =========================
-        elif action == "SELL":
-            if not has_position:
-                print("⚠️ No tienes BTC")
-            else:
-                balance += btc * price
-                print("🔴 VENTA:", btc)
+                # SAVE STATE
+                state = {
+                    "in_position": True,
+                    "buy_price": buy_price,
+                    "target": target,
+                    "stop": stop
+                }
+                save_state(state)
 
-                btc = 0
-                buy_price = None
-                last_trade_time = current_time
+        # ======================
+        # SELL LOGIC
+        # ======================
+        else:
+            print(f"Target: {target}")
+            print(f"Stop: {stop}")
 
-        # =========================
-        # 🛑 STOP LOSS / TAKE PROFIT
-        # =========================
-        if has_position and buy_price:
-            change = (price - buy_price) / buy_price
+            if price >= target:
+                print(f"SELL at {price} (target reached)")
+                in_position = False
 
-            print("📉 Cambio:", round(change * 100, 2), "%")
+            elif price <= stop:
+                print(f"SELL at {price} (stop loss)")
+                in_position = False
 
-            if change <= -0.01:
-                print("🛑 STOP LOSS")
-                balance += btc * price
-                btc = 0
-                buy_price = None
-                last_trade_time = current_time
+            if not in_position:
+                # RESET STATE
+                state = {
+                    "in_position": False,
+                    "buy_price": None,
+                    "target": None,
+                    "stop": None
+                }
+                save_state(state)
 
-            elif change >= 0.01:
-                print("💰 TAKE PROFIT")
-                balance += btc * price
-                btc = 0
-                buy_price = None
-                last_trade_time = current_time
-
-        last_price = price
-
-        print("🔁 Esperando...\n")
-        time.sleep(INTERVAL)
+        time.sleep(SLEEP_TIME)
 
     except Exception as e:
-        print("❌ Error:", e)
-        time.sleep(10)
+        print(f"Error: {e}")
+        time.sleep(SLEEP_TIME)
