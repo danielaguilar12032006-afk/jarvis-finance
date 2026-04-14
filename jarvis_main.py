@@ -1,106 +1,104 @@
 import time
-from data.market import get_price
-from core.strategy import check_buy_signal
-from core.trader import calculate_targets
-import json
-import os
+from collections import defaultdict
+from data.market import get_prices
+from config.settings import SYMBOLS
 
+# =========================
+# CONFIG
+# =========================
+TARGET_PROFIT = 0.005  # 0.5%
+MAX_POSITIONS = 3
 SLEEP_TIME = 10
-STATE_FILE = "data/state.json"
 
-# ======================
-# STATE FUNCTIONS
-# ======================
+# =========================
+# ESTADO
+# =========================
+positions = defaultdict(list)  # guarda compras por símbolo
+avg_price = {}
 
-def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    return {
-        "in_position": False,
-        "buy_price": None,
-        "target": None,
-        "stop": None
-    }
+# =========================
+# FUNCIONES
+# =========================
 
-def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
+def calculate_avg(symbol):
+    if not positions[symbol]:
+        return None
+    return sum(positions[symbol]) / len(positions[symbol])
 
-# ======================
-# INIT
-# ======================
 
-state = load_state()
+def should_buy(price, symbol):
+    # evita comprar si ya tienes muchas posiciones
+    if len(positions[symbol]) >= MAX_POSITIONS:
+        return False
 
-in_position = state["in_position"]
-buy_price = state["buy_price"]
-target = state["target"]
-stop = state["stop"]
+    # primera compra siempre permitida
+    if not positions[symbol]:
+        return True
 
-last_prices = []
+    # compra si baja un poco (mejora promedio)
+    last_price = positions[symbol][-1]
+    return price < last_price * 0.998
 
-# ======================
-# MAIN LOOP
-# ======================
 
-while True:
-    try:
-        price = get_price()
-        print(f"Price: {price}")
+def should_sell(price, symbol):
+    if not positions[symbol]:
+        return False
 
-        last_prices.append(price)
-        if len(last_prices) > 50:
-            last_prices.pop(0)
+    avg = calculate_avg(symbol)
+    target = avg * (1 + TARGET_PROFIT)
 
-        # ======================
-        # BUY LOGIC
-        # ======================
-        if not in_position:
-            if check_buy_signal(last_prices):
-                print(f"BUY at {price}")
+    return price >= target
 
-                buy_price = price
-                target, stop = calculate_targets(price)
 
-                in_position = True
+def buy(symbol, price):
+    positions[symbol].append(price)
+    avg_price[symbol] = calculate_avg(symbol)
 
-                # SAVE STATE
-                state = {
-                    "in_position": True,
-                    "buy_price": buy_price,
-                    "target": target,
-                    "stop": stop
-                }
-                save_state(state)
+    print(f"{symbol} BUY at {price} | avg: {avg_price[symbol]} | positions: {len(positions[symbol])}")
 
-        # ======================
-        # SELL LOGIC
-        # ======================
-        else:
-            print(f"Target: {target}")
-            print(f"Stop: {stop}")
 
-            if price >= target:
-                print(f"SELL at {price} (target reached)")
-                in_position = False
+def sell(symbol, price):
+    avg = avg_price[symbol]
 
-            elif price <= stop:
-                print(f"SELL at {price} (stop loss)")
-                in_position = False
+    print(f"{symbol} SELL at {price} | avg: {avg} | profit: {price - avg}")
 
-            if not in_position:
-                # RESET STATE
-                state = {
-                    "in_position": False,
-                    "buy_price": None,
-                    "target": None,
-                    "stop": None
-                }
-                save_state(state)
+    positions[symbol].clear()
+    avg_price[symbol] = None
 
-        time.sleep(SLEEP_TIME)
 
-    except Exception as e:
-        print(f"Error: {e}")
-        time.sleep(SLEEP_TIME)
+# =========================
+# LOOP PRINCIPAL
+# =========================
+
+def run():
+    print("Jarvis iniciado...\n")
+
+    while True:
+        try:
+            prices = get_prices()
+
+            for symbol in SYMBOLS:
+                price = prices[symbol]
+
+                print(f"{symbol} Price: {price}")
+
+                # DECISIONES
+                if should_buy(price, symbol):
+                    buy(symbol, price)
+
+                elif should_sell(price, symbol):
+                    sell(symbol, price)
+
+                else:
+                    print(f"{symbol} HOLD")
+
+            print("-" * 40)
+            time.sleep(SLEEP_TIME)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    run()
