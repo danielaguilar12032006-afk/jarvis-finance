@@ -11,6 +11,6 @@ def get_prices():
             ticker = exchange.fetch_ticker(symbol)
             prices[coin] = ticker["last"]
         except Exception as e:
-            print(f"Error fetching {coin}: {e}")
+            print("Error fetching {}: {}".format(coin, e))
 
     return prices
