@@ -3,22 +3,12 @@ from collections import defaultdict
 from data.market import get_prices
 from config.settings import SYMBOLS
 
-# =========================
-# CONFIG
-# =========================
-TARGET_PROFIT = 0.005  # 0.5%
+TARGET_PROFIT = 0.005
 MAX_POSITIONS = 3
 SLEEP_TIME = 10
 
-# =========================
-# ESTADO
-# =========================
-positions = defaultdict(list)  # guarda compras por símbolo
+positions = defaultdict(list)
 avg_price = {}
-
-# =========================
-# FUNCIONES
-# =========================
 
 def calculate_avg(symbol):
     if not positions[symbol]:
@@ -27,15 +17,12 @@ def calculate_avg(symbol):
 
 
 def should_buy(price, symbol):
-    # evita comprar si ya tienes muchas posiciones
     if len(positions[symbol]) >= MAX_POSITIONS:
         return False
 
-    # primera compra siempre permitida
     if not positions[symbol]:
         return True
 
-    # compra si baja un poco (mejora promedio)
     last_price = positions[symbol][-1]
     return price < last_price * 0.998
 
@@ -45,9 +32,7 @@ def should_sell(price, symbol):
         return False
 
     avg = calculate_avg(symbol)
-    target = avg * (1 + TARGET_PROFIT)
-
-    return price >= target
+    return price >= avg * (1 + TARGET_PROFIT)
 
 
 def buy(symbol, price):
@@ -66,23 +51,21 @@ def sell(symbol, price):
     avg_price[symbol] = None
 
 
-# =========================
-# LOOP PRINCIPAL
-# =========================
-
 def run():
-    print("Jarvis iniciado...\n")
+    print("Jarvis activo...\n")
 
     while True:
         try:
             prices = get_prices()
 
             for symbol in SYMBOLS:
-                price = prices[symbol]
+                price = prices.get(symbol)
 
-                print(f"{symbol} Price: {price}")
+                if not price:
+                    continue
 
-                # DECISIONES
+                print(f"{symbol} price: {price}")
+
                 if should_buy(price, symbol):
                     buy(symbol, price)
 
