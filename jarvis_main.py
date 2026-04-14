@@ -1,7 +1,7 @@
 import time
-from data.market import get_price
+from data.market import get_prices
 from config.settings import (
-    SYMBOL,
+    SYMBOLS,
     BUY_THRESHOLD,
     PROFIT_TARGET,
     STOP_LOSS,
@@ -9,32 +9,69 @@ from config.settings import (
     SLEEP_TIME
 )
 
-last_price = None
-in_position = False
-buy_price = 0
+state = {}
+
+for coin in SYMBOLS:
+    state[coin] = {
+        "last_price": None,
+        "in_position": False,
+        "buy_price": 0
+    }
 
 
 def run():
-    global last_price, in_position, buy_price
-
-    print("Jarvis activo...\n")
+    print("Jarvis multi-coin activo...\n")
 
     while True:
         try:
-            price = get_price()
+            prices = get_prices()
 
-            # PRINT ARREGLADO (solo esto cambiamos)
-            print(f"{SYMBOL} price: {price}")
+            for coin in SYMBOLS:
+                price = prices.get(coin)
+                if not price:
+                    continue
 
-            # SI NO TIENE POSICIÓN → BUSCA COMPRA
-            if not in_position and last_price:
-                change = (price - last_price) / last_price
+                s = state[coin]
 
-                if change <= -BUY_THRESHOLD:
-                    in_position = True
-                    buy_price = price
+                print(f"{coin} price: {price}")
 
-                    print(f"BUY {SYMBOL} at {price}")
+                # BUY
+                if not s["in_position"] and s["last_price"]:
+                    change = (price - s["last_price"]) / s["last_price"]
+
+                    if change <= -BUY_THRESHOLD:
+                        s["in_position"] = True
+                        s["buy_price"] = price
+
+                        print(f"BUY {coin} at {price}")
+
+                # SELL
+                elif s["in_position"]:
+                    change = (price - s["buy_price"]) / s["buy_price"]
+
+                    if change >= PROFIT_TARGET + FEE:
+                        print(f"SELL {coin} at {price} | profit: {price - s['buy_price']}")
+                        s["in_position"] = False
+
+                    elif change <= -STOP_LOSS:
+                        print(f"STOP LOSS {coin} at {price}")
+                        s["in_position"] = False
+
+                    else:
+                        print(f"{coin} HOLD")
+
+                s["last_price"] = price
+                print("-" * 30)
+
+            time.sleep(SLEEP_TIME)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    run()                    print(f"BUY {SYMBOL} at {price}")
 
             # SI YA COMPRÓ → BUSCA VENTA
             elif in_position:
