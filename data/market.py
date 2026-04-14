@@ -1,8 +1,16 @@
 import ccxt
-from config.settings import SYMBOL
+from config.settings import SYMBOLS
 
 exchange = ccxt.kraken()
 
-def get_price():
-    ticker = exchange.fetch_ticker(SYMBOL)
-    return ticker["last"]
+def get_prices():
+    prices = {}
+
+    for coin, symbol in SYMBOLS.items():
+        try:
+            ticker = exchange.fetch_ticker(symbol)
+            prices[coin] = ticker["last"]
+        except Exception as e:
+            print(f"Error fetching {coin}: {e}")
+
+    return prices
