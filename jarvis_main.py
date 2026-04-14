@@ -1,40 +1,85 @@
 import time
-from collections import defaultdict
-from data.market import get_prices
-from config.settings import SYMBOLS
+from data.market import get_price
+from config.settings import (
+    SYMBOL,
+    BUY_THRESHOLD,
+    PROFIT_TARGET,
+    STOP_LOSS,
+    FEE,
+    SLEEP_TIME
+)
 
-TARGET_PROFIT = 0.005
-MAX_POSITIONS = 3
-SLEEP_TIME = 10
+position = []  # guarda precios de compra
 
-positions = defaultdict(list)
-avg_price = {}
 
-def calculate_avg(symbol):
-    if not positions[symbol]:
+def average_price():
+    if not position:
         return None
-    return sum(positions[symbol]) / len(positions[symbol])
+    return sum(position) / len(position)
 
 
-def should_buy(price, symbol):
-    if len(positions[symbol]) >= MAX_POSITIONS:
-        return False
-
-    if not positions[symbol]:
+def should_buy(price):
+    if not position:
         return True
 
-    last_price = positions[symbol][-1]
-    return price < last_price * 0.998
+    last_buy = position[-1]
+    return price < last_buy * (1 - BUY_THRESHOLD)
 
 
-def should_sell(price, symbol):
-    if not positions[symbol]:
+def should_sell(price):
+    if not position:
         return False
 
-    avg = calculate_avg(symbol)
-    return price >= avg * (1 + TARGET_PROFIT)
+    avg = average_price()
+    target = avg * (1 + PROFIT_TARGET + FEE)
+
+    return price >= target
 
 
+def buy(price):
+    position.append(price)
+    avg = average_price()
+
+    print(f"BUY {SYMBOL} at {price} | avg: {avg} | buys: {len(position)}")
+
+
+def sell(price):
+    avg = average_price()
+    profit = price - avg
+
+    print(f"SELL {SYMBOL} at {price} | avg: {avg} | profit: {profit}")
+
+    position.clear()
+
+
+def run():
+    print("Jarvis activo...\n")
+
+    while True:
+        try:
+            price = get_price()
+
+            print(f"{SYMBOL} price: {price}")
+
+            if should_buy(price):
+                buy(price)
+
+            elif should_sell(price):
+                sell(price)
+
+            else:
+                print("HOLD")
+
+            print("-" * 30)
+            time.sleep(SLEEP_TIME)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    run()
 def buy(symbol, price):
     positions[symbol].append(price)
     avg_price[symbol] = calculate_avg(symbol)
