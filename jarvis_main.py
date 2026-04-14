@@ -9,32 +9,62 @@ from config.settings import (
     SLEEP_TIME
 )
 
-position = []  # guarda precios de compra
+last_price = None
+in_position = False
+buy_price = 0
 
 
-def average_price():
-    if not position:
-        return None
-    return sum(position) / len(position)
+def run():
+    global last_price, in_position, buy_price
+
+    print("Jarvis activo...\n")
+
+    while True:
+        try:
+            price = get_price()
+
+            # PRINT ARREGLADO (solo esto cambiamos)
+            print(f"{SYMBOL} price: {price}")
+
+            # SI NO TIENE POSICIÓN → BUSCA COMPRA
+            if not in_position and last_price:
+                change = (price - last_price) / last_price
+
+                if change <= -BUY_THRESHOLD:
+                    in_position = True
+                    buy_price = price
+
+                    print(f"BUY {SYMBOL} at {price}")
+
+            # SI YA COMPRÓ → BUSCA VENTA
+            elif in_position:
+                change = (price - buy_price) / buy_price
+
+                # PROFIT
+                if change >= PROFIT_TARGET + FEE:
+                    print(f"SELL {SYMBOL} at {price} | profit: {price - buy_price}")
+                    in_position = False
+
+                # STOP LOSS
+                elif change <= -STOP_LOSS:
+                    print(f"STOP LOSS {SYMBOL} at {price}")
+                    in_position = False
+
+                else:
+                    print("HOLD")
+
+            last_price = price
+            print("-" * 30)
+
+            time.sleep(SLEEP_TIME)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
 
 
-def should_buy(price):
-    if not position:
-        return True
-
-    last_buy = position[-1]
-    return price < last_buy * (1 - BUY_THRESHOLD)
-
-
-def should_sell(price):
-    if not position:
-        return False
-
-    avg = average_price()
-    target = avg * (1 + PROFIT_TARGET + FEE)
-
-    return price >= target
-
+if __name__ == "__main__":
+    run()
 
 def buy(price):
     position.append(price)
