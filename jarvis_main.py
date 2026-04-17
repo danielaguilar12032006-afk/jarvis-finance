@@ -12,10 +12,14 @@ from config.settings import (
 
 from jarvis_alerts import log_trade
 
-# 🔐 CONFIGURACIÓN KRAKEN
+# 🔐 CONFIGURACIÓN CORREGIDA
 exchange = ccxt.kraken({
     'apiKey': 'TU_API_KEY',
-    'secret': 'TU_API_SECRET'
+    'secret': 'TU_API_SECRET',
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'spot'
+    }
 })
 
 print("Jarvis corriendo...")
@@ -25,25 +29,27 @@ positions = {}
 
 while True:
     try:
+        # 🔍 TEST DE CONEXIÓN (CLAVE)
+        balance = exchange.fetch_balance()
+
         for coin, symbol in SYMBOLS.items():
             ticker = exchange.fetch_ticker(symbol)
             price = ticker['last']
 
             print(f"{coin} price: {price}")
 
-            # guardar precio anterior
             if coin not in last_prices:
                 last_prices[coin] = price
                 continue
 
             change = (price - last_prices[coin]) / last_prices[coin]
 
-            # 💥 BUY
+            # 🟢 BUY
             if coin not in positions and change <= -BUY_THRESHOLD:
                 amount = TRADE_AMOUNT / price
 
                 try:
-                    order = exchange.create_market_buy_order(symbol, amount)
+                    exchange.create_market_buy_order(symbol, amount)
 
                     positions[coin] = price
                     msg = f"🟢 BUY {coin} at {price}"
@@ -53,17 +59,16 @@ while True:
                 except Exception as e:
                     print(f"Error BUY {coin}: {e}")
 
-            # 💥 SELL / STOP
+            # 🔴 SELL / STOP
             if coin in positions:
                 entry_price = positions[coin]
                 profit = (price - entry_price) / entry_price
+                amount = TRADE_AMOUNT / entry_price
 
                 # TAKE PROFIT
                 if profit >= PROFIT_TARGET:
-                    amount = TRADE_AMOUNT / entry_price
-
                     try:
-                        order = exchange.create_market_sell_order(symbol, amount)
+                        exchange.create_market_sell_order(symbol, amount)
 
                         msg = f"🔴 SELL {coin} at {price} | profit: {profit:.4f}"
                         print(msg)
@@ -76,10 +81,8 @@ while True:
 
                 # STOP LOSS
                 elif profit <= -STOP_LOSS:
-                    amount = TRADE_AMOUNT / entry_price
-
                     try:
-                        order = exchange.create_market_sell_order(symbol, amount)
+                        exchange.create_market_sell_order(symbol, amount)
 
                         msg = f"⚠️ STOP LOSS {coin} at {price} | loss: {profit:.4f}"
                         print(msg)
