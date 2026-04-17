@@ -1,40 +1,40 @@
-import time
 import ccxt
-
-from config.settings import (
-    SYMBOLS,
-    BUY_THRESHOLD,
-    PROFIT_TARGET,
-    STOP_LOSS,
-    SLEEP_TIME,
-    TRADE_AMOUNT
-)
-
-from jarvis_alerts import log_trade
-
-# 🔐 CONFIGURACIÓN CORREGIDA
-exchange = ccxt.kraken({
-    'apiKey': 'TU_API_KEY',
-    'secret': 'TU_API_SECRET',
-    'enableRateLimit': True,
-    'options': {
-        'defaultType': 'spot'
-    }
-})
+import os
+import time
 
 print("Jarvis corriendo...")
 
-last_prices = {}
-positions = {}
+# 🔑 Obtener keys desde Railway
+api_key = os.getenv("TU_API_KEY").strip()
+api_secret = os.getenv("TU_API_SECRET").strip()
+
+# 🔥 FIX IMPORTANTE (quita errores de padding)
+api_secret = api_secret.replace(" ", "").replace("\n", "")
+
+# 🔗 Conexión a Kraken
+exchange = ccxt.kraken({
+    'apiKey': api_key,
+    'secret': api_secret,
+    'enableRateLimit': True,
+})
 
 while True:
     try:
-        # 🔍 TEST DE CONEXIÓN (CLAVE)
-        balance = exchange.fetch_balance()
+        # 📊 Obtener precios
+        btc = exchange.fetch_ticker('BTC/USD')['last']
+        eth = exchange.fetch_ticker('ETH/USD')['last']
+        sol = exchange.fetch_ticker('SOL/USD')['last']
 
-        for coin, symbol in SYMBOLS.items():
-            ticker = exchange.fetch_ticker(symbol)
-            price = ticker['last']
+        print(f"BTC price: {btc}")
+        print(f"ETH price: {eth}")
+        print(f"SOL price: {sol}")
+
+        print("----- ciclo terminado -----")
+
+    except Exception as e:
+        print("Error general:", str(e))
+
+    time.sleep(10)            price = ticker['last']
 
             print(f"{coin} price: {price}")
 
