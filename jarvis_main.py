@@ -12,7 +12,7 @@ from config.settings import (
 )
 
 # 🔒 CONFIG REAL (seguro)
-TRADE_AMOUNT_USD = 2
+TRADE_AMOUNT_USD = 8
 
 exchange = ccxt.kraken({
     "apiKey": os.getenv("API_KEY"),
