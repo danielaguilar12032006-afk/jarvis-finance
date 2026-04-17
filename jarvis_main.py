@@ -1,104 +1,100 @@
 import time
-import os
 import ccxt
-from data.market import get_prices
+
 from config.settings import (
     SYMBOLS,
     BUY_THRESHOLD,
     PROFIT_TARGET,
     STOP_LOSS,
-    FEE,
-    SLEEP_TIME
+    SLEEP_TIME,
+    TRADE_AMOUNT
 )
 
-# 🔒 CONFIG REAL (seguro)
-TRADE_AMOUNT_USD = 8
+from jarvis_alerts import log_trade
 
+# 🔐 CONFIGURACIÓN KRAKEN
 exchange = ccxt.kraken({
-    "apiKey": os.getenv("API_KEY"),
-    "secret": os.getenv("API_SECRET")
+    'apiKey': 'TU_API_KEY',
+    'secret': 'TU_API_SECRET'
 })
 
-state = {}
+print("Jarvis corriendo...")
 
-for coin in SYMBOLS:
-    state[coin] = {
-        "last_price": None,
-        "in_position": False,
-        "buy_price": 0
-    }
+last_prices = {}
+positions = {}
 
+while True:
+    try:
+        for coin, symbol in SYMBOLS.items():
+            ticker = exchange.fetch_ticker(symbol)
+            price = ticker['last']
 
-def run():
-    print("Jarvis REAL activo...\n")
+            print(f"{coin} price: {price}")
 
-    while True:
-        try:
-            prices = get_prices()
+            # guardar precio anterior
+            if coin not in last_prices:
+                last_prices[coin] = price
+                continue
 
-            for coin, symbol in SYMBOLS.items():
-                price = prices.get(coin)
-                if not price:
-                    continue
+            change = (price - last_prices[coin]) / last_prices[coin]
 
-                s = state[coin]
+            # 💥 BUY
+            if coin not in positions and change <= -BUY_THRESHOLD:
+                amount = TRADE_AMOUNT / price
 
-                print("{} price: {}".format(coin, price))
+                try:
+                    order = exchange.create_market_buy_order(symbol, amount)
 
-                # ================= BUY =================
-                if not s["in_position"] and s["last_price"] is not None:
-                    change = (price - s["last_price"]) / s["last_price"]
+                    positions[coin] = price
+                    msg = f"🟢 BUY {coin} at {price}"
+                    print(msg)
+                    log_trade(msg)
 
-                    if change <= -BUY_THRESHOLD:
-                        amount = TRADE_AMOUNT_USD / price
+                except Exception as e:
+                    print(f"Error BUY {coin}: {e}")
 
-                        exchange.create_market_buy_order(symbol, amount)
+            # 💥 SELL / STOP
+            if coin in positions:
+                entry_price = positions[coin]
+                profit = (price - entry_price) / entry_price
 
-                        s["in_position"] = True
-                        s["buy_price"] = price
+                # TAKE PROFIT
+                if profit >= PROFIT_TARGET:
+                    amount = TRADE_AMOUNT / entry_price
 
-                        print("BUY {} at {}".format(coin, price))
+                    try:
+                        order = exchange.create_market_sell_order(symbol, amount)
 
-                # ================= SELL =================
-                elif s["in_position"]:
-                    change = (price - s["buy_price"]) / s["buy_price"]
+                        msg = f"🔴 SELL {coin} at {price} | profit: {profit:.4f}"
+                        print(msg)
+                        log_trade(msg)
 
-                    if change >= (PROFIT_TARGET + FEE):
-                        amount = TRADE_AMOUNT_USD / s["buy_price"]
+                        del positions[coin]
 
-                        exchange.create_market_sell_order(symbol, amount)
+                    except Exception as e:
+                        print(f"Error SELL {coin}: {e}")
 
-                        print("SELL {} at {} | profit: {}".format(
-                            coin,
-                            price,
-                            price - s["buy_price"]
-                        ))
+                # STOP LOSS
+                elif profit <= -STOP_LOSS:
+                    amount = TRADE_AMOUNT / entry_price
 
-                        s["in_position"] = False
+                    try:
+                        order = exchange.create_market_sell_order(symbol, amount)
 
-                    elif change <= -STOP_LOSS:
-                        amount = TRADE_AMOUNT_USD / s["buy_price"]
+                        msg = f"⚠️ STOP LOSS {coin} at {price} | loss: {profit:.4f}"
+                        print(msg)
+                        log_trade(msg)
 
-                        exchange.create_market_sell_order(symbol, amount)
+                        del positions[coin]
 
-                        print("STOP LOSS {} at {}".format(coin, price))
+                    except Exception as e:
+                        print(f"Error STOP {coin}: {e}")
 
-                        s["in_position"] = False
+            last_prices[coin] = price
 
-                    else:
-                        print("{} HOLD".format(coin))
+        print("----- ciclo terminado -----")
+        time.sleep(SLEEP_TIME)
 
-                # actualizar último precio
-                s["last_price"] = price
-
-                print("-" * 30)
-
-            time.sleep(SLEEP_TIME)
-
-        except Exception as e:
-            print("Error:", e)
-            time.sleep(5)
-
-
-if __name__ == "__main__":
-    run()
+    except Exception as e:
+        print(f"Error general: {e}")
+        time.sleep(10)
