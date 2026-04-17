@@ -4,14 +4,11 @@ import time
 
 print("Jarvis corriendo...")
 
-# 🔑 Obtener keys desde Railway
 api_key = os.getenv("TU_API_KEY").strip()
 api_secret = os.getenv("TU_API_SECRET").strip()
 
-# 🔥 FIX IMPORTANTE (quita errores de padding)
 api_secret = api_secret.replace(" ", "").replace("\n", "")
 
-# 🔗 Conexión a Kraken
 exchange = ccxt.kraken({
     'apiKey': api_key,
     'secret': api_secret,
@@ -20,21 +17,15 @@ exchange = ccxt.kraken({
 
 while True:
     try:
-        # 📊 Obtener precios
-        btc = exchange.fetch_ticker('BTC/USD')['last']
-        eth = exchange.fetch_ticker('ETH/USD')['last']
-        sol = exchange.fetch_ticker('SOL/USD')['last']
+        ticker = exchange.fetch_ticker('BTC/USD')
+        price = ticker['last']
 
-        print(f"BTC price: {btc}")
-        print(f"ETH price: {eth}")
-        print(f"SOL price: {sol}")
+        print("BTC price:", price)
 
-        print("----- ciclo terminado -----")
+        time.sleep(10)
 
     except Exception as e:
-        print("Error general:", str(e))
-
-    time.sleep(10)            price = ticker['last']
+        print("Error general:", str(e))    time.sleep(10)            price = ticker['last']
 
             print(f"{coin} price: {price}")
 
