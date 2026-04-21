@@ -16,8 +16,8 @@ exchange = ccxt.kraken({
 })
 
 symbol = 'BTC/USD'
-min_usd = 10  # mínimo Kraken aprox
-trade_usd = 12  # lo que intentará usar
+min_usd = 10
+trade_usd = 12
 
 last_price = None
 position = False
@@ -35,13 +35,14 @@ while True:
             continue
 
         change = (price - last_price) / last_price
+        print("Cambio:", change)
 
         balance = exchange.fetch_balance()
         usd_balance = balance['free'].get('USD', 0)
         btc_balance = balance['free'].get('BTC', 0)
 
         # 📉 BAJA → COMPRA
-        if change < -0.002 and not position:
+        if change < -0.0005 and not position:
             print("🔻 Bajó, intentando comprar...")
 
             usd_to_use = min(trade_usd, usd_balance)
@@ -52,10 +53,10 @@ while True:
                 print("✅ BUY ejecutado:", order)
                 position = True
             else:
-                print("⚠️ No hay suficiente USD para cumplir mínimo")
+                print("⚠️ No hay suficiente USD")
 
         # 📈 SUBE → VENDE
-        elif change > 0.002 and position:
+        elif change > 0.0005 and position:
             print("🔺 Subió, intentando vender...")
 
             if btc_balance > 0:
