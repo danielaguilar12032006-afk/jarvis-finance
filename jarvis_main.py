@@ -7,8 +7,6 @@ print("Jarvis trading iniciado...")
 api_key = os.getenv("TU_API_KEY").strip()
 api_secret = os.getenv("TU_API_SECRET").strip()
 
-api_secret = api_secret.replace(" ", "").replace("\n", "")
-
 exchange = ccxt.kraken({
     'apiKey': api_key,
     'secret': api_secret,
@@ -19,7 +17,7 @@ symbol = 'BTC/USD'
 min_usd = 10
 trade_usd = 12
 
-prices = []  # memoria de precios
+prices = []
 position = False
 
 while True:
@@ -30,12 +28,9 @@ while True:
         print("Precio:", price)
 
         prices.append(price)
-
-        # mantener últimos 5 precios
         if len(prices) > 5:
             prices.pop(0)
 
-        # esperar a tener datos
         if len(prices) < 5:
             time.sleep(10)
             continue
@@ -49,26 +44,40 @@ while True:
         usd_balance = balance['free'].get('USD', 0)
         btc_balance = balance['free'].get('BTC', 0)
 
-        # 📉 BAJA → COMPRA
+        print("USD disponible:", usd_balance)
+        print("BTC disponible:", btc_balance)
+
+        # 🔻 COMPRA
         if change < -0.0005 and not position:
-            print("🔻 Bajó vs base, comprando...")
+            print("Intentando BUY...")
 
             usd_to_use = min(trade_usd, usd_balance)
 
-            if usd_to_use >= min_usd:
+            if usd_to_use < min_usd:
+                print("❌ No hay suficiente USD")
+            else:
                 amount_btc = usd_to_use / price
-                order = exchange.create_market_buy_order(symbol, amount_btc)
-                print("✅ BUY ejecutado:", order)
-                position = True
 
-        # 📈 SUBE → VENDE
+                try:
+                    order = exchange.create_market_buy_order(symbol, amount_btc)
+                    print("✅ BUY REAL ejecutado:", order)
+                    position = True
+                except Exception as e:
+                    print("❌ ERROR BUY:", str(e))
+
+        # 🔺 VENTA
         elif change > 0.0005 and position:
-            print("🔺 Subió vs base, vendiendo...")
+            print("Intentando SELL...")
 
-            if btc_balance > 0:
-                order = exchange.create_market_sell_order(symbol, btc_balance)
-                print("✅ SELL ejecutado:", order)
-                position = False
+            if btc_balance <= 0:
+                print("❌ No hay BTC para vender")
+            else:
+                try:
+                    order = exchange.create_market_sell_order(symbol, btc_balance)
+                    print("✅ SELL REAL ejecutado:", order)
+                    position = False
+                except Exception as e:
+                    print("❌ ERROR SELL:", str(e))
 
         time.sleep(10)
 
