@@ -15,7 +15,7 @@ exchange = ccxt.kraken({
 
 symbol = 'BTC/USD'
 min_usd = 10
-trade_usd = 12
+trade_usd = 10  # ajustado al mínimo real
 
 prices = []
 position = False
@@ -41,7 +41,13 @@ while True:
         print("Cambio real:", change)
 
         balance = exchange.fetch_balance()
-        usd_balance = balance['free'].get('USD', 0)
+
+        usd_balance = (
+            balance['free'].get('USD', 0) +
+            balance['free'].get('ZUSD', 0) +
+            balance['free'].get('USD.F', 0)
+        )
+
         btc_balance = balance['free'].get('BTC', 0)
 
         print("USD disponible:", usd_balance)
