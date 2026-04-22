@@ -1,37 +1,57 @@
 import ccxt
 import time
+import os
 
-# 🔐 API CONFIG
+# ==============================
+# CONFIG
+# ==============================
+
+SYMBOLS = ["BTC/CAD", "ETH/CAD", "SOL/CAD"]
+MONTO_COMPRA_CAD = 6
+TIEMPO_ESPERA = 10
+
+# ==============================
+# EXCHANGE
+# ==============================
+
 exchange = ccxt.kraken({
-    'apiKey': 'TU_API_KEY',
-    'secret': 'TU_API_SECRET',
+    'apiKey': os.getenv("API_KEY"),
+    'secret': os.getenv("API_SECRET"),
     'enableRateLimit': True
 })
 
-# ⚙️ CONFIG
-SYMBOLS = ["BTC/CAD", "ETH/CAD", "SOL/CAD"]
-MONTO_COMPRA_CAD = 6  # mínimo real
-TIEMPO_ESPERA = 10  # segundos
+# ==============================
+# BALANCE (CORREGIDO KRAKEN)
+# ==============================
 
-# 📊 BASE DE PRECIOS
-precios_base = {}
-
-
-# =========================
-# 🔍 BALANCES
-# =========================
 def obtener_balance(asset):
     try:
         balance = exchange.fetch_balance()
-        return balance['free'].get(asset, 0)
+
+        mapping = {
+            "CAD": ["CAD", "ZCAD"],
+            "BTC": ["BTC", "XBT", "XXBT"],
+            "ETH": ["ETH", "XETH"],
+            "SOL": ["SOL"]
+        }
+
+        posibles = mapping.get(asset, [asset])
+
+        for nombre in posibles:
+            if nombre in balance['free']:
+                return balance['free'][nombre]
+
+        return 0
+
     except Exception as e:
         print(f"Error balance {asset}: {e}")
         return 0
 
 
-# =========================
-# 💰 COMPRA
-# =========================
+# ==============================
+# COMPRA
+# ==============================
+
 def comprar(symbol, monto_cad):
     try:
         ticker = exchange.fetch_ticker(symbol)
@@ -42,15 +62,16 @@ def comprar(symbol, monto_cad):
         print(f"🟢 BUY {symbol} | {cantidad}")
 
         order = exchange.create_market_buy_order(symbol, cantidad)
-        print(f"✅ Compra ejecutada: {order}")
+        print(f"✅ Compra ejecutada")
 
     except Exception as e:
         print(f"❌ Error compra {symbol}: {e}")
 
 
-# =========================
-# 💸 VENTA
-# =========================
+# ==============================
+# VENTA
+# ==============================
+
 def vender(symbol):
     try:
         asset = symbol.split("/")[0]
@@ -63,47 +84,59 @@ def vender(symbol):
         print(f"🔴 SELL {symbol} | {balance}")
 
         order = exchange.create_market_sell_order(symbol, balance)
-        print(f"✅ Venta ejecutada: {order}")
+        print(f"✅ Venta ejecutada")
 
     except Exception as e:
         print(f"❌ Error venta {symbol}: {e}")
 
 
-# =========================
-# 🧠 LOOP PRINCIPAL
-# =========================
+# ==============================
+# BASE DE PRECIOS
+# ==============================
+
+precios_base = {}
+
+print("Jarvis PRO iniciado...")
+
+# ==============================
+# LOOP
+# ==============================
+
 while True:
     try:
         cad_balance = obtener_balance("CAD")
         print(f"\n💰 CAD disponible: {cad_balance}")
 
         for symbol in SYMBOLS:
-            ticker = exchange.fetch_ticker(symbol)
-            precio_actual = ticker['last']
+            try:
+                ticker = exchange.fetch_ticker(symbol)
+                precio_actual = ticker['last']
 
-            # Inicializar base
-            if symbol not in precios_base:
-                precios_base[symbol] = precio_actual
-                continue
-
-            cambio = (precio_actual - precios_base[symbol]) / precios_base[symbol]
-
-            print(f"{symbol} | Precio: {precio_actual} | Cambio: {cambio}")
-
-            # 📉 BAJÓ → COMPRAR
-            if cambio < -0.001:
-                if cad_balance >= MONTO_COMPRA_CAD:
-                    print(f"📉 {symbol} bajó → comprando")
-                    comprar(symbol, MONTO_COMPRA_CAD)
+                if symbol not in precios_base:
                     precios_base[symbol] = precio_actual
-                else:
-                    print("❌ Sin CAD suficiente")
+                    continue
 
-            # 📈 SUBIÓ → VENDER
-            elif cambio > 0.001:
-                print(f"📈 {symbol} subió → vendiendo")
-                vender(symbol)
-                precios_base[symbol] = precio_actual
+                cambio = (precio_actual - precios_base[symbol]) / precios_base[symbol]
+
+                print(f"{symbol} | Precio: {precio_actual} | Cambio: {cambio}")
+
+                # 📉 COMPRA
+                if cambio < -0.001:
+                    if cad_balance >= MONTO_COMPRA_CAD:
+                        print(f"📉 {symbol} bajó → COMPRAR")
+                        comprar(symbol, MONTO_COMPRA_CAD)
+                        precios_base[symbol] = precio_actual
+                    else:
+                        print("❌ Sin CAD suficiente")
+
+                # 📈 VENTA
+                elif cambio > 0.001:
+                    print(f"📈 {symbol} subió → VENDER")
+                    vender(symbol)
+                    precios_base[symbol] = precio_actual
+
+            except Exception as e:
+                print(f"Error con {symbol}: {e}")
 
         time.sleep(TIEMPO_ESPERA)
 
