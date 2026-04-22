@@ -1,102 +1,112 @@
 import ccxt
 import time
-import os
 
-# ==============================
-# CONFIG
-# ==============================
-
-SYMBOLS = [
-    "ETH/CAD",
-    "BTC/CAD",
-    "SOL/CAD"
-]
-
-MIN_CAD = 5
-TRADE_AMOUNT = 5
-SLEEP_TIME = 10
-
-# ==============================
-# EXCHANGE (ENV VARIABLES)
-# ==============================
-
+# 🔐 API CONFIG
 exchange = ccxt.kraken({
-    'apiKey': os.getenv("TU_API_KEY"),
-    'secret': os.getenv("TU_API_SECRET"),
+    'apiKey': 'TU_API_KEY',
+    'secret': 'TU_API_SECRET',
     'enableRateLimit': True
 })
 
-# ==============================
-# BASE PRICES
-# ==============================
+# ⚙️ CONFIG
+SYMBOLS = ["BTC/CAD", "ETH/CAD", "SOL/CAD"]
+MONTO_COMPRA_CAD = 6  # mínimo real
+TIEMPO_ESPERA = 10  # segundos
 
-base_prices = {}
+# 📊 BASE DE PRECIOS
+precios_base = {}
 
-print("Jarvis trading iniciado...")
 
-# ==============================
-# LOOP
-# ==============================
-
-while True:
+# =========================
+# 🔍 BALANCES
+# =========================
+def obtener_balance(asset):
     try:
         balance = exchange.fetch_balance()
-        cad_balance = balance['total'].get('CAD', 0)
+        return balance['free'].get(asset, 0)
+    except Exception as e:
+        print(f"Error balance {asset}: {e}")
+        return 0
 
+
+# =========================
+# 💰 COMPRA
+# =========================
+def comprar(symbol, monto_cad):
+    try:
+        ticker = exchange.fetch_ticker(symbol)
+        precio = ticker['last']
+
+        cantidad = monto_cad / precio
+
+        print(f"🟢 BUY {symbol} | {cantidad}")
+
+        order = exchange.create_market_buy_order(symbol, cantidad)
+        print(f"✅ Compra ejecutada: {order}")
+
+    except Exception as e:
+        print(f"❌ Error compra {symbol}: {e}")
+
+
+# =========================
+# 💸 VENTA
+# =========================
+def vender(symbol):
+    try:
+        asset = symbol.split("/")[0]
+        balance = obtener_balance(asset)
+
+        if balance <= 0:
+            print(f"❌ No hay {asset} para vender")
+            return
+
+        print(f"🔴 SELL {symbol} | {balance}")
+
+        order = exchange.create_market_sell_order(symbol, balance)
+        print(f"✅ Venta ejecutada: {order}")
+
+    except Exception as e:
+        print(f"❌ Error venta {symbol}: {e}")
+
+
+# =========================
+# 🧠 LOOP PRINCIPAL
+# =========================
+while True:
+    try:
+        cad_balance = obtener_balance("CAD")
         print(f"\n💰 CAD disponible: {cad_balance}")
 
         for symbol in SYMBOLS:
-            try:
-                ticker = exchange.fetch_ticker(symbol)
-                price = ticker['last']
+            ticker = exchange.fetch_ticker(symbol)
+            precio_actual = ticker['last']
 
-                print(f"{symbol} precio: {price}")
+            # Inicializar base
+            if symbol not in precios_base:
+                precios_base[symbol] = precio_actual
+                continue
 
-                # guardar primer precio
-                if symbol not in base_prices:
-                    base_prices[symbol] = price
-                    continue
+            cambio = (precio_actual - precios_base[symbol]) / precios_base[symbol]
 
-                change = (price - base_prices[symbol]) / base_prices[symbol]
-                print(f"{symbol} cambio: {change}")
+            print(f"{symbol} | Precio: {precio_actual} | Cambio: {cambio}")
 
-                # ==============================
-                # BUY
-                # ==============================
-                if change < -0.001:
-                    print(f"🔻 {symbol} bajó")
+            # 📉 BAJÓ → COMPRAR
+            if cambio < -0.001:
+                if cad_balance >= MONTO_COMPRA_CAD:
+                    print(f"📉 {symbol} bajó → comprando")
+                    comprar(symbol, MONTO_COMPRA_CAD)
+                    precios_base[symbol] = precio_actual
+                else:
+                    print("❌ Sin CAD suficiente")
 
-                    if cad_balance >= MIN_CAD:
-                        amount = TRADE_AMOUNT / price
+            # 📈 SUBIÓ → VENDER
+            elif cambio > 0.001:
+                print(f"📈 {symbol} subió → vendiendo")
+                vender(symbol)
+                precios_base[symbol] = precio_actual
 
-                        exchange.create_market_buy_order(symbol, amount)
-
-                        print(f"🟢 BUY {symbol} | {amount}")
-                        base_prices[symbol] = price
-
-                    else:
-                        print("❌ Sin CAD suficiente")
-
-                # ==============================
-                # SELL
-                # ==============================
-                elif change > 0.001:
-                    print(f"🔺 {symbol} subió")
-
-                    asset = symbol.split('/')[0]
-                    asset_balance = balance['total'].get(asset, 0)
-
-                    if asset_balance > 0:
-                        exchange.create_market_sell_order(symbol, asset_balance)
-
-                        print(f"🔴 SELL {symbol} | {asset_balance}")
-                        base_prices[symbol] = price
-
-            except Exception as e:
-                print(f"Error con {symbol}: {e}")
-
-        time.sleep(SLEEP_TIME)
+        time.sleep(TIEMPO_ESPERA)
 
     except Exception as e:
-        print("Error general:", e)
-        time.sleep(10)
+        print(f"⚠️ Error general: {e}")
+        time.sleep(5)
