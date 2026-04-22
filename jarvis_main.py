@@ -19,7 +19,7 @@ symbol = 'BTC/USD'
 min_usd = 10
 trade_usd = 12
 
-last_price = None
+prices = []  # memoria de precios
 position = False
 
 while True:
@@ -29,13 +29,21 @@ while True:
 
         print("Precio:", price)
 
-        if last_price is None:
-            last_price = price
+        prices.append(price)
+
+        # mantener últimos 5 precios
+        if len(prices) > 5:
+            prices.pop(0)
+
+        # esperar a tener datos
+        if len(prices) < 5:
             time.sleep(10)
             continue
 
-        change = (price - last_price) / last_price
-        print("Cambio:", change)
+        base_price = prices[0]
+        change = (price - base_price) / base_price
+
+        print("Cambio real:", change)
 
         balance = exchange.fetch_balance()
         usd_balance = balance['free'].get('USD', 0)
@@ -43,7 +51,7 @@ while True:
 
         # 📉 BAJA → COMPRA
         if change < -0.0005 and not position:
-            print("🔻 Bajó, intentando comprar...")
+            print("🔻 Bajó vs base, comprando...")
 
             usd_to_use = min(trade_usd, usd_balance)
 
@@ -52,21 +60,16 @@ while True:
                 order = exchange.create_market_buy_order(symbol, amount_btc)
                 print("✅ BUY ejecutado:", order)
                 position = True
-            else:
-                print("⚠️ No hay suficiente USD")
 
         # 📈 SUBE → VENDE
         elif change > 0.0005 and position:
-            print("🔺 Subió, intentando vender...")
+            print("🔺 Subió vs base, vendiendo...")
 
             if btc_balance > 0:
                 order = exchange.create_market_sell_order(symbol, btc_balance)
                 print("✅ SELL ejecutado:", order)
                 position = False
-            else:
-                print("⚠️ No hay BTC para vender")
 
-        last_price = price
         time.sleep(10)
 
     except Exception as e:
