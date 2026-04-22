@@ -21,8 +21,8 @@ SLEEP_TIME = 10
 # ==============================
 
 exchange = ccxt.kraken({
-    'apiKey': os.getenv("API_KEY"),
-    'secret': os.getenv("API_SECRET"),
+    'apiKey': os.getenv("TU_API_KEY"),
+    'secret': os.getenv("TU_API_SECRET"),
     'enableRateLimit': True
 })
 
