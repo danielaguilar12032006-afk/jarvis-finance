@@ -121,7 +121,7 @@ while True:
                 print(f"{symbol} | Precio: {precio_actual} | Cambio: {cambio}")
 
                 # 📉 COMPRA
-                if cambio < -0.001:
+                if cambio < -0.004:
                     if cad_balance >= MONTO_COMPRA_CAD:
                         print(f"📉 {symbol} bajó → COMPRAR")
                         comprar(symbol, MONTO_COMPRA_CAD)
@@ -130,7 +130,7 @@ while True:
                         print("❌ Sin CAD suficiente")
 
                 # 📈 VENTA
-                elif cambio > 0.001:
+                elif cambio > 0.008:
                     print(f"📈 {symbol} subió → VENDER")
                     vender(symbol)
                     precios_base[symbol] = precio_actual
