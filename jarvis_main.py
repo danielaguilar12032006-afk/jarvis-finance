@@ -3,100 +3,152 @@ import time
 import os
 
 # ==============================
-# CONFIG
-# ==============================
-
-SYMBOLS = ["BTC/CAD", "ETH/CAD", "SOL/CAD"]
-MONTO_COMPRA_CAD = 6
-TIEMPO_ESPERA = 10
-
-# ==============================
-# EXCHANGE
+# API
 # ==============================
 
 exchange = ccxt.kraken({
-    'apiKey': os.getenv("API_KEY"),
-    'secret': os.getenv("API_SECRET"),
-    'enableRateLimit': True
+    'apiKey': os.getenv("KRAKEN_API_KEY"),
+    'secret': os.getenv("KRAKEN_SECRET"),
 })
 
 # ==============================
-# BALANCE (CORREGIDO KRAKEN)
+# CONFIG
 # ==============================
 
-def obtener_balance(asset):
+SYMBOLS = [
+    "BTC/CAD",
+    "ETH/CAD",
+    "SOL/CAD",
+    "XRP/CAD"
+]
+
+TRADE_MIN = 6
+FEE = 0.004
+SLEEP = 15
+
+STRATEGY_SPLIT = {
+    "DCA": 0.35,
+    "TREND": 0.50,
+    "MEAN": 0.15
+}
+
+base_prices = {}
+last_dca = {}
+
+print("Jarvis FINANCE iniciado...")
+
+# ==============================
+# FUNCIONES
+# ==============================
+
+def get_price(symbol):
+    return exchange.fetch_ticker(symbol)['last']
+
+
+def get_balance():
+    balance = exchange.fetch_balance()
+    return balance['CAD']['free']
+
+
+def buy(symbol, cad_amount):
+    try:
+        price = get_price(symbol)
+
+        amount = (cad_amount / price) * (1 - FEE)
+
+        exchange.create_market_buy_order(symbol, amount)
+
+        print(f"🟢 BUY {symbol} | {cad_amount:.2f} CAD")
+
+    except Exception as e:
+        print("BUY ERROR:", e)
+
+
+def sell(symbol):
     try:
         balance = exchange.fetch_balance()
 
-        mapping = {
-            "CAD": ["CAD", "ZCAD"],
-            "BTC": ["BTC", "XBT", "XXBT"],
-            "ETH": ["ETH", "XETH"],
-            "SOL": ["SOL"]
-        }
+        coin = symbol.split('/')[0]
 
-        posibles = mapping.get(asset, [asset])
+        amount = balance[coin]['free']
 
-        for nombre in posibles:
-            if nombre in balance['free']:
-                return balance['free'][nombre]
-
-        return 0
-
-    except Exception as e:
-        print(f"Error balance {asset}: {e}")
-        return 0
-
-
-# ==============================
-# COMPRA
-# ==============================
-
-def comprar(symbol, monto_cad):
-    try:
-        ticker = exchange.fetch_ticker(symbol)
-        precio = ticker['last']
-
-        cantidad = monto_cad / precio
-
-        print(f"🟢 BUY {symbol} | {cantidad}")
-
-        order = exchange.create_market_buy_order(symbol, cantidad)
-        print(f"✅ Compra ejecutada")
-
-    except Exception as e:
-        print(f"❌ Error compra {symbol}: {e}")
-
-
-# ==============================
-# VENTA
-# ==============================
-
-def vender(symbol):
-    try:
-        asset = symbol.split("/")[0]
-        balance = obtener_balance(asset)
-
-        if balance <= 0:
-            print(f"❌ No hay {asset} para vender")
+        if amount <= 0:
             return
 
-        print(f"🔴 SELL {symbol} | {balance}")
+        exchange.create_market_sell_order(symbol, amount)
 
-        order = exchange.create_market_sell_order(symbol, balance)
-        print(f"✅ Venta ejecutada")
+        print(f"🔴 SELL {symbol}")
 
     except Exception as e:
-        print(f"❌ Error venta {symbol}: {e}")
+        print("SELL ERROR:", e)
 
 
 # ==============================
-# BASE DE PRECIOS
+# ESTRATEGIAS
 # ==============================
 
-precios_base = {}
+def dca(symbol):
+    now = time.time()
 
-print("Jarvis PRO iniciado...")
+    if symbol not in last_dca:
+        last_dca[symbol] = 0
+
+    # cada 6 horas
+    if now - last_dca[symbol] > 21600:
+
+        cad_balance = get_balance()
+
+        amount = cad_balance * STRATEGY_SPLIT["DCA"]
+
+        if amount >= TRADE_MIN:
+            buy(symbol, min(amount, 15))
+
+        last_dca[symbol] = now
+
+
+def trend(symbol, price):
+    if symbol not in base_prices:
+        base_prices[symbol] = price
+        return
+
+    change = (price - base_prices[symbol]) / base_prices[symbol]
+
+    cad_balance = get_balance()
+
+    if change > 0.01:
+
+        amount = cad_balance * STRATEGY_SPLIT["TREND"]
+
+        if amount >= TRADE_MIN:
+            buy(symbol, min(amount, 20))
+
+    elif change < -0.007:
+        sell(symbol)
+
+    base_prices[symbol] = price
+
+
+def mean(symbol, price):
+    if symbol not in base_prices:
+        base_prices[symbol] = price
+        return
+
+    change = (price - base_prices[symbol]) / base_prices[symbol]
+
+    cad_balance = get_balance()
+
+    if change < -0.005:
+
+        amount = cad_balance * STRATEGY_SPLIT["MEAN"]
+
+        if amount >= TRADE_MIN:
+            buy(symbol, min(amount, 10))
+
+    elif change > 0.01:
+        sell(symbol)
+
+    base_prices[symbol] = price
+
 
 # ==============================
 # LOOP
@@ -104,42 +156,24 @@ print("Jarvis PRO iniciado...")
 
 while True:
     try:
-        cad_balance = obtener_balance("CAD")
-        print(f"\n💰 CAD disponible: {cad_balance}")
+        cad_balance = get_balance()
+
+        print(f"\n💵 CAD Disponible: {cad_balance:.2f}")
 
         for symbol in SYMBOLS:
-            try:
-                ticker = exchange.fetch_ticker(symbol)
-                precio_actual = ticker['last']
 
-                if symbol not in precios_base:
-                    precios_base[symbol] = precio_actual
-                    continue
+            price = get_price(symbol)
 
-                cambio = (precio_actual - precios_base[symbol]) / precios_base[symbol]
+            dca(symbol)
+            trend(symbol, price)
+            mean(symbol, price)
 
-                print(f"{symbol} | Precio: {precio_actual} | Cambio: {cambio}")
+            print(f"{symbol} | {price:.2f}")
 
-                # 📉 COMPRA
-                if cambio < -0.004:
-                    if cad_balance >= MONTO_COMPRA_CAD:
-                        print(f"📉 {symbol} bajó → COMPRAR")
-                        comprar(symbol, MONTO_COMPRA_CAD)
-                        precios_base[symbol] = precio_actual
-                    else:
-                        print("❌ Sin CAD suficiente")
+        print("------ ciclo terminado ------\n")
 
-                # 📈 VENTA
-                elif cambio > 0.008:
-                    print(f"📈 {symbol} subió → VENDER")
-                    vender(symbol)
-                    precios_base[symbol] = precio_actual
-
-            except Exception as e:
-                print(f"Error con {symbol}: {e}")
-
-        time.sleep(TIEMPO_ESPERA)
+        time.sleep(SLEEP)
 
     except Exception as e:
-        print(f"⚠️ Error general: {e}")
+        print("MAIN ERROR:", e)
         time.sleep(5)
